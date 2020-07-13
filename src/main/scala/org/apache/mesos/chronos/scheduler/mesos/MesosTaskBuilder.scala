@@ -21,6 +21,7 @@ import scala.collection.Map
   * @author Florian Leibert (flo@leibert.de)
   */
 class MesosTaskBuilder @Inject()(val conf: SchedulerConfiguration) {
+  final val envUserAsRun = "USERASRUN_CHRONOS"
   final val cpusResourceName = "cpus"
   final val memResourceName = "mem"
   final val diskResourceName = "disk"
@@ -55,6 +56,7 @@ class MesosTaskBuilder @Inject()(val conf: SchedulerConfiguration) {
   def getMesosTaskInfoBuilder(taskIdStr: String,
                               job: BaseJob,
                               offer: Offer): TaskInfo.Builder = {
+
     //TODO(FL): Allow adding more fine grained resource controls.
     val taskId = TaskID.newBuilder().setValue(taskIdStr).build()
     val taskInfo = TaskInfo
@@ -113,8 +115,15 @@ class MesosTaskBuilder @Inject()(val conf: SchedulerConfiguration) {
           .addAllArguments(job.arguments.asJava)
           .addAllUris(uriCommand.asJava)
       }
-      if (job.runAsUser.nonEmpty) {
-        command.setUser(job.runAsUser)
+
+      // Overwrite userAsRun field using the "CHRONOS_USERASRUN" environment variable, if it exists
+      val runAsUserJob = sys.env.get(envUserAsRun) match {
+        case value: Option[String] => value.get.toString
+        case _ => job.runAsUser
+      }
+      log.info("\nrunAsUser: " + runAsUserJob + "\n\n")
+      if (runAsUserJob.nonEmpty) {
+        command.setUser(runAsUserJob)
       }
       taskInfo.setCommand(command.build())
       if (job.container != null) {
@@ -304,8 +313,15 @@ class MesosTaskBuilder @Inject()(val conf: SchedulerConfiguration) {
       .setValue(job.executor)
       .setEnvironment(environment)
       .addAllUris(uriProtos.asJava)
-    if (job.runAsUser.nonEmpty) {
-      command.setUser(job.runAsUser)
+    // Overwrite userAsRun field using the "envUserAsRun" environment variable, if it exists
+    val runAsUserJob = sys.env.get(envUserAsRun) match {
+      case value: Option[String] => value.get.toString
+      case _ => job.runAsUser
+    }
+    log.info("\nrunAsUser2: " + runAsUserJob + "\n\n")
+
+    if (runAsUserJob.nonEmpty) {
+      command.setUser(runAsUserJob)
     }
     val executor = ExecutorInfo
       .newBuilder()
